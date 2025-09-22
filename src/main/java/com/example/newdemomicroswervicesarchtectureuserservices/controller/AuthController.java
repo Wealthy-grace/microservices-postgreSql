@@ -62,7 +62,7 @@ public class AuthController {
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @GetMapping("/admin")
     public String adminEndpoint(){
-        return "congrtulations, welcome Admin to Spring Security!";
+        return "congratulations, welcome Admin to Spring Security!";
     }
 
 }
