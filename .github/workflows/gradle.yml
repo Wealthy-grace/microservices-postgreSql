@@ -386,18 +386,12 @@ jobs:
   cleanup:
     name: Cleanup
     runs-on: ubuntu-latest
-    needs: [ deploy-dev, deploy-prod, integration-tests ]
+    needs: [deploy-dev, deploy-prod, integration-tests]
     if: always()
 
     steps:
       - name: Clean up artifacts
         run: |
-          echo "Performing cleanup tasks..."
-
-          # Only run Docker cleanup if Docker is available
-          if command -v docker >/dev/null 2>&1; then
-            echo "Docker detected, pruning unused resources..."
-            docker system prune -af
-          else
-            echo "Docker not installed, skipping Docker cleanup."
-          fi
+          echo "Performing cleanup tasks"
+          # Add cleanup commands if needed
+          docker system prune -f
