@@ -7,6 +7,13 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: write
+  security-events: write
+
 env:
   DOCKER_IMAGE_NAME: user-service
   DOCKER_REGISTRY: docker.io
@@ -83,13 +90,13 @@ jobs:
           SPRING_RABBITMQ_USERNAME: guest
           SPRING_RABBITMQ_PASSWORD: guest
 
-      - name: Generate test report
-        uses: dorny/test-reporter@v1
-        if: success() || failure()
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
         with:
-          name: Gradle Tests
-          path: build/test-results/test/*.xml
-          reporter: java-junit
+          files: build/test-results/test/*.xml
+          check_name: "Gradle Test Results"
+          comment_title: "Unit Test Results"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
