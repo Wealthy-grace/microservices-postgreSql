@@ -1,9 +1,11 @@
-package com.example.springsecuritydemo2025.persistence.entity;
+package com.example.newdemomicroswervicesarchtectureuserservices.persistence.entity;
 
 public enum Role {
 
     ROLE_USER,
-    ROLE_ADMIN
+    ROLE_ADMIN,
+
+    ROLE_MEDIATOR
 
 
 }

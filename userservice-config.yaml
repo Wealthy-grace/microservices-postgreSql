@@ -7,7 +7,7 @@ metadata:
 data:
   application.properties: |
     spring.application.name=userservice
-    server.port=8080
+    server.port=8083
 
     # Database configuration
     spring.datasource.url=jdbc:postgresql://postgres-service:5432/userService
@@ -64,7 +64,7 @@ spec:
         - name: userservice
           image: godfrey10/userservice:latest
           ports:
-            - containerPort: 8080
+            - containerPort: 8083
           volumeMounts:
             - name: config-volume
               mountPath: /config
@@ -85,5 +85,5 @@ spec:
   selector:
     app: userservice
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 8083
+      targetPort: 8083

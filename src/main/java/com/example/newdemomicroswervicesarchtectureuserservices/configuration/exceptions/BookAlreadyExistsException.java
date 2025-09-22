@@ -1,4 +1,4 @@
-package com.example.springsecuritydemo2025.configuration.exceptions;
+package com.example.newdemomicroswervicesarchtectureuserservices.configuration.exceptions;
 
 public class BookAlreadyExistsException extends RuntimeException {
     public BookAlreadyExistsException(String message) {

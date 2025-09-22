@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: userservice
+  namespace: user-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: userservice
+  template:
+    metadata:
+      labels:
+        app: userservice
+    spec:
+      containers:
+        - name: userservice
+          image: godfrey10/userservice:latest
+          ports:
+            - containerPort: 8083
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config
+              readOnly: true
+      volumes:
+        - name: config-volume
+          configMap:
+            name: userservice-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: userservice
+  namespace: user-namespace
+spec:
+  type: ClusterIP
+  selector:
+    app: userservice
+  ports:
+    - port: 8083
+      targetPort: 8083

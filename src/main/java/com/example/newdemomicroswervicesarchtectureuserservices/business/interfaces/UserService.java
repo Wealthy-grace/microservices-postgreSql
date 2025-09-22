@@ -1,7 +1,8 @@
-package com.example.springsecuritydemo2025.business.interfaces;
+package com.example.newdemomicroswervicesarchtectureuserservices.business.interfaces;
 
-import com.example.springsecuritydemo2025.domain.dto.UserDto;
-import com.example.springsecuritydemo2025.domain.request.SignUpRequest;
+
+import com.example.newdemomicroswervicesarchtectureuserservices.domain.dto.UserDto;
+import com.example.newdemomicroswervicesarchtectureuserservices.domain.request.SignUpRequest;
 
 public interface UserService {
 

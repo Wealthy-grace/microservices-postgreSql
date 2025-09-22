@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  postgres-user:
+    image: postgres:15
+    container_name: user-postgres
+    environment:
+      POSTGRES_DB: userService
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Server123@
+    ports:
+      - "5433:5432"   # host port 5433 mapped to container 5432
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    networks:
+      - user-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-user
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5673:5672"   # host port 5673 mapped to container 5672
+      - "15673:15672" # management UI
+    networks:
+      - user-network
+
+  userservice:
+    build: .
+    container_name: userservice
+    depends_on:
+      - postgres-user
+      - rabbitmq
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-user:5432/userService
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: Server123@
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+    ports:
+      - "8083:8083"
+    networks:
+      - user-network
+
+volumes:
+  user-db-data:
+
+networks:
+  user-network:
+    driver: bridge

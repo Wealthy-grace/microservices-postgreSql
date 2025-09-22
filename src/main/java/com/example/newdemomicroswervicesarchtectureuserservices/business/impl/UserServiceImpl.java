@@ -1,12 +1,13 @@
-package com.example.springsecuritydemo2025.business.impl;
+package com.example.newdemomicroswervicesarchtectureuserservices.business.impl;
 
-import com.example.springsecuritydemo2025.business.interfaces.UserService;
-import com.example.springsecuritydemo2025.domain.dto.UserDto;
-import com.example.springsecuritydemo2025.domain.request.SignUpRequest;
-import com.example.springsecuritydemo2025.persistence.entity.Role;
-import com.example.springsecuritydemo2025.persistence.entity.UserEntity;
-import com.example.springsecuritydemo2025.persistence.repository.UserRepo;
-import com.example.springsecuritydemo2025.security.jwt.JwtUtils;
+
+import com.example.newdemomicroswervicesarchtectureuserservices.business.interfaces.UserService;
+import com.example.newdemomicroswervicesarchtectureuserservices.domain.dto.UserDto;
+import com.example.newdemomicroswervicesarchtectureuserservices.domain.request.SignUpRequest;
+import com.example.newdemomicroswervicesarchtectureuserservices.persistence.entity.Role;
+import com.example.newdemomicroswervicesarchtectureuserservices.persistence.entity.UserEntity;
+import com.example.newdemomicroswervicesarchtectureuserservices.persistence.repository.UserRepo;
+import com.example.newdemomicroswervicesarchtectureuserservices.security.jwt.JwtUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -29,7 +30,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserDto createUser(SignUpRequest signUpRequest) {
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
-            throw new RuntimeException("Username is already taken.");
+            throw new RuntimeException("Username is already taken." + signUpRequest.getUsername());
         }
 
         UserEntity user = new UserEntity();
@@ -39,8 +40,8 @@ public class UserServiceImpl implements UserService {
         user.setFullName(signUpRequest.getFullName());
         user.setEnabled(true);
 
-        //user.setRole(signUpRequest.getRole());
-        user.setRole(Role.ROLE_ADMIN);
+        user.setRole(signUpRequest.getRole());
+        //user.setRole(Role.ROLE_MEDIATOR);
         user.setImage(signUpRequest.getImage());
 
         userRepository.save(user);

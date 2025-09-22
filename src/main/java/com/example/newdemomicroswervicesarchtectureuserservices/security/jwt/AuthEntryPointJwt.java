@@ -1,4 +1,4 @@
-package com.example.springsecuritydemo2025.security.jwt;
+package com.example.newdemomicroswervicesarchtectureuserservices.security.jwt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;

@@ -1,8 +1,9 @@
-package com.example.springsecuritydemo2025.controller;
+package com.example.newdemomicroswervicesarchtectureuserservices.controller;
 
-import com.example.springsecuritydemo2025.business.interfaces.UserService;
-import com.example.springsecuritydemo2025.domain.dto.UserDto;
-import com.example.springsecuritydemo2025.domain.request.SignUpRequest;
+
+import com.example.newdemomicroswervicesarchtectureuserservices.business.interfaces.UserService;
+import com.example.newdemomicroswervicesarchtectureuserservices.domain.dto.UserDto;
+import com.example.newdemomicroswervicesarchtectureuserservices.domain.request.SignUpRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -56,6 +57,12 @@ public class AuthController {
     @GetMapping("/user")
     public String userEndpoint(){
         return "Hello, User!";
+    }
+
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @GetMapping("/admin")
+    public String adminEndpoint(){
+        return "congrtulations, welcome Admin to Spring Security!";
     }
 
 }

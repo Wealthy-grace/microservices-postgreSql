@@ -1,4 +1,4 @@
-package com.example.springsecuritydemo2025.persistence.entity;
+package com.example.newdemomicroswervicesarchtectureuserservices.persistence.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

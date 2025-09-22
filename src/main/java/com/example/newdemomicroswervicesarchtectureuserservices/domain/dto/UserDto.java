@@ -1,6 +1,7 @@
-package com.example.springsecuritydemo2025.domain.dto;
+package com.example.newdemomicroswervicesarchtectureuserservices.domain.dto;
 
-import com.example.springsecuritydemo2025.persistence.entity.UserEntity;
+
+import com.example.newdemomicroswervicesarchtectureuserservices.persistence.entity.UserEntity;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

@@ -1,10 +1,10 @@
-package com.example.springsecuritydemo2025.business.Converter;
+package com.example.newdemomicroswervicesarchtectureuserservices.business.Converter;
 
-import com.example.springsecuritydemo2025.domain.dto.BookDto;
-import com.example.springsecuritydemo2025.domain.dto.UserDto;
-import com.example.springsecuritydemo2025.persistence.entity.BookEntity;
-import com.example.springsecuritydemo2025.persistence.entity.Role;
-import com.example.springsecuritydemo2025.persistence.entity.UserEntity;
+
+import com.example.newdemomicroswervicesarchtectureuserservices.domain.dto.UserDto;
+import com.example.newdemomicroswervicesarchtectureuserservices.domain.request.SignUpRequest;
+import com.example.newdemomicroswervicesarchtectureuserservices.persistence.entity.Role;
+import com.example.newdemomicroswervicesarchtectureuserservices.persistence.entity.UserEntity;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -22,9 +22,9 @@ public class UserConverDto {
     }
 
 
-    private UserEntity mapToEntity(UserDto dto) {
+    private UserEntity mapToEntity(SignUpRequest dto) {
         return UserEntity.builder()
-                .id(dto.getId())
+                //.id(dto.getId())
                 .fullName(dto.getFullName())
                 .username(dto.getUsername())
                 .email(dto.getEmail())

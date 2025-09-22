@@ -1,4 +1,4 @@
-package com.example.springsecuritydemo2025.security.Config;
+package com.example.newdemomicroswervicesarchtectureuserservices.security.Config;
 //
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;

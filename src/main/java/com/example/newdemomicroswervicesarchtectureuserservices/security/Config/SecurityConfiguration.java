@@ -1,10 +1,9 @@
-package com.example.springsecuritydemo2025.security.Config;
-
-import com.example.springsecuritydemo2025.security.jwt.AuthEntryPointJwt;
-import com.example.springsecuritydemo2025.security.jwt.AuthTokenFilter;
-import com.example.springsecuritydemo2025.security.jwt.JwtUtils;
+package com.example.newdemomicroswervicesarchtectureuserservices.security.Config;
 
 
+import com.example.newdemomicroswervicesarchtectureuserservices.security.jwt.AuthEntryPointJwt;
+import com.example.newdemomicroswervicesarchtectureuserservices.security.jwt.AuthTokenFilter;
+import com.example.newdemomicroswervicesarchtectureuserservices.security.jwt.JwtUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
