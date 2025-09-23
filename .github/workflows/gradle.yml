@@ -1,4 +1,4 @@
-name: CI/CD Pipeline for UserService (PostgreSQL + RabbitMQ)
+name: CI/CD Pipeline for UserService
 
 on:
   push:
@@ -13,16 +13,18 @@ permissions:
   actions: read
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: wealthy-grace/user-service
+  REGISTRY: docker.io
+  IMAGE_NAME: godfrey10/user-service
   JAVA_VERSION: 17
   GRADLE_VERSION: 8.5
 
 jobs:
-  # 1. Build & Test with PostgreSQL + RabbitMQ
+  # -----------------------------
+  # 1. Build and Test
+  # -----------------------------
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -34,11 +36,10 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=5s
+          --health-cmd="pg_isready -U postgres -d userService"
+          --health-interval=10s
           --health-timeout=5s
           --health-retries=5
-          --health-start-period=15s
 
       rabbitmq:
         image: rabbitmq:3-management
@@ -48,12 +49,6 @@ jobs:
         ports:
           - 5672:5672
           - 15672:15672
-        options: >-
-          --health-cmd="rabbitmq-diagnostics -q ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-          --health-start-period=20s
 
     steps:
       - name: Checkout code
@@ -72,154 +67,44 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
-          cache-read-only: false
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # Wait for DB and RabbitMQ to be healthy while Gradle warms up
-      - name: Wait for Postgres & RabbitMQ
-        run: |
-          echo "⏳ Waiting for PostgreSQL..."
-          for i in {1..20}; do
-            if pg_isready -h 127.0.0.1 -p 5432 -U postgres >/dev/null 2>&1; then
-              echo "✅ PostgreSQL ready"
-              break
-            fi
-            echo "Waiting for postgres... ($i/20)"
-            sleep 3
-          done
-
-          echo "⏳ Waiting for RabbitMQ management port..."
-          for i in {1..20}; do
-            if curl -s http://127.0.0.1:15672 >/dev/null 2>&1; then
-              echo "✅ RabbitMQ ready"
-              break
-            fi
-            echo "Waiting for rabbitmq... ($i/20)"
-            sleep 3
-          done
-
-      - name: Parallel database setup & compile
-        run: |
-          (
-            echo "⏳ Preparing database..."
-            for i in {1..15}; do
-              if pg_isready -h 127.0.0.1 -p 5432 -U postgres >/dev/null 2>&1; then
-                PGPASSWORD=Server123@ psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE IF NOT EXISTS userService_test;" >/dev/null 2>&1 || true
-                echo "✅ Database ready!"
-                break
-              fi
-              sleep 1
-            done
-          ) &
-
-          echo "🔨 Compiling..."
-          ./gradlew compileJava compileTestJava --parallel --build-cache --configuration-cache --no-daemon
-
-          wait
-
-      - name: Run tests with optimized gradle
-        run: |
-          ./gradlew test \
-            --parallel \
-            --build-cache \
-            --configuration-cache \
-            --no-daemon \
-            --continue \
-            -Dorg.gradle.jvmargs="-Xmx2g -XX:+UseParallelGC" \
-            -Dspring.datasource.url=jdbc:postgresql://127.0.0.1:5432/userService \
-            -Dspring.datasource.username=postgres \
-            -Dspring.datasource.password=Server123@ \
-            -Dspring.rabbitmq.host=127.0.0.1 \
-            -Dspring.rabbitmq.port=5672 \
-            -Dspring.rabbitmq.username=guest \
-            -Dspring.rabbitmq.password=guest \
-            -Dspring.jpa.hibernate.ddl-auto=create-drop
+      - name: Run tests
+        run: ./gradlew test --no-daemon
         env:
           SPRING_PROFILES_ACTIVE: test
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/userService
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: Server123@
+          SPRING_RABBITMQ_HOST: localhost
+          SPRING_RABBITMQ_PORT: 5672
+          SPRING_RABBITMQ_USERNAME: guest
+          SPRING_RABBITMQ_PASSWORD: guest
 
-      - name: Build JAR (optimized)
-        run: |
-          ./gradlew bootJar \
-            --parallel \
-            --build-cache \
-            --configuration-cache \
-            --no-daemon \
-            -x test \
-            -Dorg.gradle.jvmargs="-Xmx2g -XX:+UseParallelGC"
+      - name: Build JAR
+        run: ./gradlew bootJar -x test --no-daemon
 
-      - name: Upload JAR artifact
+      - name: Upload JAR artifacts
         uses: actions/upload-artifact@v4
         with:
           name: jar-artifacts
           path: build/libs/*.jar
           retention-days: 1
-          compression-level: 6
 
-      - name: Upload test reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-reports
-          path: build/reports/tests/
-          retention-days: 3
-
-  # 2. Security scan (runs in parallel after tests on push)
-  security-scan:
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    if: github.event_name == 'push'
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
-          cache: gradle
-
-      - name: Setup Gradle (read-only)
-        uses: gradle/gradle-build-action@v2
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
-          cache-read-only: true
-
-      - name: Run dependency/security check
-        run: |
-          ./gradlew dependencyCheckAnalyze --no-daemon --configuration-cache || true
-
-      - name: Upload security reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: security-reports
-          path: build/reports/
-          retention-days: 3
-
-  # 3. Build & Push Docker Image
+  # -----------------------------
+  # 2. Docker Build & Push
+  # -----------------------------
   build-docker:
     runs-on: ubuntu-latest
     needs: build-and-test
     if: github.event_name == 'push'
     timeout-minutes: 12
 
-    outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
-      image-tag: ${{ steps.meta.outputs.tags }}
-      image-labels: ${{ steps.meta.outputs.labels }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Download JAR artifacts
         uses: actions/download-artifact@v4
@@ -229,14 +114,11 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-flags: |
-            --allow-insecure-entitlement network.host
 
-      - name: Log in to registry (GHCR / Docker)
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: docker.io
           username: godfrey10
           password: godfreygrace10
 
@@ -265,271 +147,95 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
 
-      - name: Output image details
-        run: |
-          echo "✅ Docker image built and pushed"
-          echo "Image digest: ${{ steps.build.outputs.digest }}"
-          echo "Image tags: ${{ steps.meta.outputs.tags }}"
-
-  # 4. Deploy to Staging
+  # -----------------------------
+  # 3. Deploy Staging
+  # -----------------------------
   deploy-staging:
     runs-on: ubuntu-latest
     needs: build-docker
-    if: github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/develop'
     environment: staging
-    timeout-minutes: 12
-
-    services:
-      postgres-staging:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: Server123@
-          POSTGRES_DB: userService
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -h localhost -p 5432"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-          --health-start-period=20s
-
-      rabbitmq-staging:
-        image: rabbitmq:3-management
-        env:
-          RABBITMQ_DEFAULT_USER: guest
-          RABBITMQ_DEFAULT_PASS: guest
-        ports:
-          - 5673:5672
-          - 15673:15672
-        options: >-
-          --health-cmd="rabbitmq-diagnostics -q ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-          --health-start-period=20s
+    timeout-minutes: 8
 
     steps:
-      - name: Setup staging DB
+      - name: Deploy Staging
         run: |
-          echo "⏳ Waiting for staging Postgres..."
-          for i in {1..30}; do
-            if pg_isready -h 127.0.0.1 -p 5433 -U postgres >/dev/null 2>&1; then
-              echo "✅ Postgres staging ready"
-              break
-            fi
-            sleep 2
-          done
-          PGPASSWORD=Server123@ psql -h 127.0.0.1 -p 5433 -U postgres -c "CREATE DATABASE IF NOT EXISTS userService;" || true
-
-      - name: Deploy to staging (docker run)
-        run: |
-          IMAGE_TAG="${{ needs.build-docker.outputs.image-tag }}"
-          FIRST_TAG=$(echo "$IMAGE_TAG" | head -n1)
-          echo "Deploying staging image: $FIRST_TAG"
-
-          # Pull in background
-          docker pull "$FIRST_TAG" & PULL_PID=$!
+          docker pull docker.io/${{ env.IMAGE_NAME }}:latest
 
           docker stop userservice-staging 2>/dev/null || true
           docker rm userservice-staging 2>/dev/null || true
 
-          wait $PULL_PID
-
           docker run -d --name userservice-staging \
-            -p 8083:8081 \
+            -p 8083:8083 \
             -e SPRING_PROFILES_ACTIVE=staging \
-            -e SERVER_PORT=8081 \
-            -e SPRING_DATASOURCE_URL="jdbc:postgresql://host.docker.internal:5433/userService" \
+            -e SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5433/userService \
             -e SPRING_DATASOURCE_USERNAME=postgres \
             -e SPRING_DATASOURCE_PASSWORD=Server123@ \
             -e SPRING_RABBITMQ_HOST=host.docker.internal \
             -e SPRING_RABBITMQ_PORT=5673 \
             -e SPRING_RABBITMQ_USERNAME=guest \
             -e SPRING_RABBITMQ_PASSWORD=guest \
-            -e JAVA_OPTS="-Xmx512m -Xms256m -XX:+UseG1GC" \
-            --restart unless-stopped \
-            --add-host=host.docker.internal:host-gateway \
-            --health-cmd="curl -f http://localhost:8081/ || curl -f http://localhost:8081/api/health || exit 1" \
-            --health-interval=30s \
-            --health-timeout=10s \
-            --health-retries=5 \
-            --health-start-period=45s \
-            "$FIRST_TAG"
+            docker.io/${{ env.IMAGE_NAME }}:latest
 
-      - name: Verify staging deployment
-        run: |
-          echo "Waiting for app startup..."
-          sleep 25
-          if ! docker ps | grep -q userservice-staging; then
-            docker logs userservice-staging --tail 200 || true
-            exit 1
-          fi
-
-          for i in {1..6}; do
-            if curl -f -s http://localhost:8083/ > /dev/null 2>&1; then
-              echo "Staging app responded"
-              exit 0
-            fi
-            echo "Retry $i"
-            sleep 5
-          done
-
-          echo "Staging health check failed"
-          docker logs userservice-staging --tail 200 || true
-          exit 1
-
-  # 5. Deploy to Production
+  # -----------------------------
+  # 4. Deploy Production
+  # -----------------------------
   deploy-production:
     runs-on: ubuntu-latest
     needs: build-docker
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main'
     environment: production
-    timeout-minutes: 12
-
-    services:
-      postgres-prod:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: Server123@
-          POSTGRES_DB: userService
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -h localhost -p 5432"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-          --health-start-period=20s
-
-      rabbitmq-prod:
-        image: rabbitmq:3-management
-        env:
-          RABBITMQ_DEFAULT_USER: guest
-          RABBITMQ_DEFAULT_PASS: guest
-        ports:
-          - 5672:5672
-          - 15672:15672
-        options: >-
-          --health-cmd="rabbitmq-diagnostics -q ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-          --health-start-period=20s
+    timeout-minutes: 10
 
     steps:
-      - name: Setup production DB
+      - name: Deploy Production
         run: |
-          echo "⏳ Waiting for prod Postgres..."
-          for i in {1..30}; do
-            if pg_isready -h 127.0.0.1 -p 5432 -U postgres >/dev/null 2>&1; then
-              echo "✅ Postgres prod ready"
-              break
-            fi
-            sleep 2
-          done
-          PGPASSWORD=Server123@ psql -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE IF NOT EXISTS userService;" || true
+          docker pull docker.io/${{ env.IMAGE_NAME }}:latest
 
-      - name: Deploy to production (docker run)
-        run: |
-          IMAGE_TAG="${{ needs.build-docker.outputs.image-tag }}"
-          FIRST_TAG=$(echo "$IMAGE_TAG" | head -n1)
-          echo "Deploying production image: $FIRST_TAG"
-
-          docker pull "$FIRST_TAG" & PULL_PID=$!
           docker stop userservice 2>/dev/null || true
           docker rm userservice 2>/dev/null || true
-          wait $PULL_PID
 
           docker run -d --name userservice \
-            -p 80:8081 \
+            -p 80:8083 \
             -e SPRING_PROFILES_ACTIVE=production \
-            -e SERVER_PORT=8081 \
-            -e SPRING_DATASOURCE_URL="jdbc:postgresql://host.docker.internal:5432/userService" \
+            -e SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5433/userService \
             -e SPRING_DATASOURCE_USERNAME=postgres \
             -e SPRING_DATASOURCE_PASSWORD=Server123@ \
             -e SPRING_RABBITMQ_HOST=host.docker.internal \
-            -e SPRING_RABBITMQ_PORT=5672 \
+            -e SPRING_RABBITMQ_PORT=5673 \
             -e SPRING_RABBITMQ_USERNAME=guest \
             -e SPRING_RABBITMQ_PASSWORD=guest \
-            -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
-            -e JAVA_OPTS="-Xmx1g -Xms512m -XX:+UseG1GC -XX:+UseStringDeduplication" \
-            --restart unless-stopped \
-            --add-host=host.docker.internal:host-gateway \
-            --health-cmd="curl -f http://localhost:8081/ || curl -f http://localhost:8081/api/health || exit 1" \
-            --health-interval=30s \
-            --health-timeout=10s \
-            --health-retries=5 \
-            --health-start-period=60s \
-            --memory=1.5g \
-            --cpus=2 \
-            "$FIRST_TAG"
+            docker.io/${{ env.IMAGE_NAME }}:latest
 
-      - name: Verify production deployment
-        run: |
-          echo "Waiting for production startup..."
-          sleep 30
-          if ! docker ps | grep -q userservice; then
-            docker logs userservice --tail 200 || true
-            exit 1
-          fi
-
-          for i in {1..8}; do
-            if curl -f -s http://localhost/ > /dev/null 2>&1; then
-              echo "Production app responded"
-              exit 0
-            fi
-            echo "Retry $i"
-            sleep 5
-          done
-
-          echo "Production health check failed"
-          docker logs userservice --tail 200 || true
-          exit 1
-
-  # 6. Cleanup
+  # -----------------------------
+  # 5. Cleanup
+  # -----------------------------
   cleanup:
     runs-on: ubuntu-latest
     needs: [ build-and-test, build-docker, deploy-staging, deploy-production ]
     if: always()
-    timeout-minutes: 3
-
     steps:
-      - name: Cleanup workspace and Docker
+      - name: Cleanup Docker
         run: |
-          echo "🧹 Cleaning up Docker and workspace..."
-          docker system prune -af --filter "until=168h" 2>/dev/null || true
-          docker image prune -f 2>/dev/null || true
-          docker volume prune -f 2>/dev/null || true
+          docker system prune -af || true
+          docker volume prune -f || true
           rm -rf build/ || true
-          rm -rf ~/.gradle/caches/build-cache-* 2>/dev/null || true
-          echo "✅ Cleanup complete"
 
-  # 7. Notification
+  # -----------------------------
+  # 6. Notifications
+  # -----------------------------
   notify:
     runs-on: ubuntu-latest
     needs: [ deploy-staging, deploy-production, cleanup ]
-    if: always() && (needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success')
-    timeout-minutes: 2
-
+    if: always()
     steps:
-      - name: Send deployment notification (console)
+      - name: Notify Deployment
         run: |
           if [[ "${{ needs.deploy-production.result }}" == "success" ]]; then
             echo "🎉 Production deployment successful!"
-            echo "Branch: ${{ github.ref_name }}"
-            echo "Commit: ${{ github.sha }}"
-            echo "Image: ${{ needs.build-docker.outputs.image-tag }}"
           elif [[ "${{ needs.deploy-staging.result }}" == "success" ]]; then
             echo "🚀 Staging deployment successful!"
-            echo "Branch: ${{ github.ref_name }}"
-            echo "Commit: ${{ github.sha }}"
-            echo "Image: ${{ needs.build-docker.outputs.image-tag }}"
+          else
+            echo "⚠️ Deployment failed!"
           fi
