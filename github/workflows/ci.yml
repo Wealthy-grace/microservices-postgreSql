@@ -154,29 +154,29 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: build-docker
-    if: github.ref == 'refs/heads/develop'
     environment: staging
     timeout-minutes: 8
 
-    steps:
-      - name: Deploy Staging
-        run: |
-          docker pull docker.io/${{ env.IMAGE_NAME }}:latest
 
-          docker stop userservice-staging 2>/dev/null || true
-          docker rm userservice-staging 2>/dev/null || true
-
-          docker run -d --name userservice-staging \
-            -p 8083:8083 \
-            -e SPRING_PROFILES_ACTIVE=staging \
-            -e SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5433/userService \
-            -e SPRING_DATASOURCE_USERNAME=postgres \
-            -e SPRING_DATASOURCE_PASSWORD=Server123@ \
-            -e SPRING_RABBITMQ_HOST=host.docker.internal \
-            -e SPRING_RABBITMQ_PORT=5673 \
-            -e SPRING_RABBITMQ_USERNAME=guest \
-            -e SPRING_RABBITMQ_PASSWORD=guest \
-            docker.io/${{ env.IMAGE_NAME }}:latest
+  #    steps:
+#      - name: Deploy Staging
+#        run: |
+#          docker pull docker.io/${{ env.IMAGE_NAME }}:latest
+#
+#          docker stop userservice-staging 2>/dev/null || true
+#          docker rm userservice-staging 2>/dev/null || true
+#
+#          docker run -d --name userservice-staging \
+#            -p 8083:8083 \
+#            -e SPRING_PROFILES_ACTIVE=staging \
+#            -e SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5433/userService \
+#            -e SPRING_DATASOURCE_USERNAME=postgres \
+#            -e SPRING_DATASOURCE_PASSWORD=Server123@ \
+#            -e SPRING_RABBITMQ_HOST=host.docker.internal \
+#            -e SPRING_RABBITMQ_PORT=5673 \
+#            -e SPRING_RABBITMQ_USERNAME=guest \
+#            -e SPRING_RABBITMQ_PASSWORD=guest \
+#            docker.io/${{ env.IMAGE_NAME }}:latest
 
   # -----------------------------
   # 4. Deploy Production
