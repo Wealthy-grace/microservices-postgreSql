@@ -319,47 +319,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create docker-compose.yml if not exists
+      - name: Update docker-compose for CI/CD deployment
         run: |
-          if [ ! -f "docker-compose.yml" ]; then
-            echo "Creating docker-compose.yml for deployment..."
-            cat > docker-compose.yml << 'EOF'
-          services:
-            user-service:
-              image: ${DOCKER_IMAGE}
-              ports:
-                - "8083:8080"
-              environment:
-                - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-development}
-                - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-userService_dev}
-                - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-postgres}
-                - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-Server123@}
-                - SPRING_RABBITMQ_HOST=rabbitmq
-                - SPRING_RABBITMQ_PORT=5672
-                - SPRING_RABBITMQ_USERNAME=${RABBITMQ_DEFAULT_USER:-guest}
-                - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_DEFAULT_PASS:-guest}
-              depends_on:
-                postgres:
-                  condition: service_healthy
-                rabbitmq:
-                  condition: service_healthy
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
-                interval: 30s
-                timeout: 10s
-                retries: 3
-                start_period: 40s
+          echo "Updating docker-compose.yml for CI/CD deployment..."
           
-            postgres:
+          # Create a CI/CD specific docker-compose file that works with your existing structure
+          cat > docker-compose.ci.yml << 'EOF'
+          version: "3.9"
+          
+          services:
+            postgres-user:
               image: postgres:15
+              container_name: user-postgres-ci
               environment:
-                - POSTGRES_DB=${POSTGRES_DB:-userService_dev}
-                - POSTGRES_USER=${POSTGRES_USER:-postgres}
-                - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-Server123@}
+                POSTGRES_DB: ${POSTGRES_DB:-userService}
+                POSTGRES_USER: ${POSTGRES_USER:-postgres}
+                POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Server123@}
               ports:
-                - "5432:5432"
+                - "5432:5432"   # Use standard port for CI
               volumes:
-                - postgres_data:/var/lib/postgresql/data
+                - user-db-data:/var/lib/postgresql/data
+              networks:
+                - user-network
               healthcheck:
                 test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
                 interval: 10s
@@ -368,22 +349,56 @@ jobs:
           
             rabbitmq:
               image: rabbitmq:3-management
+              container_name: rabbitmq-user-ci
               environment:
-                - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-guest}
-                - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:-guest}
+                RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+                RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
               ports:
-                - "5672:5672"
-                - "15672:15672"
+                - "5672:5672"   # Use standard port for CI
+                - "15672:15672" # management UI
+              networks:
+                - user-network
               healthcheck:
                 test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
                 interval: 30s
                 timeout: 10s
                 retries: 5
           
+            userservice:
+              image: ${DOCKER_IMAGE}
+              container_name: userservice-ci
+              depends_on:
+                postgres-user:
+                  condition: service_healthy
+                rabbitmq:
+                  condition: service_healthy
+              environment:
+                SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-user:5432/${POSTGRES_DB:-userService}
+                SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+                SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-Server123@}
+                SPRING_RABBITMQ_HOST: rabbitmq
+                SPRING_RABBITMQ_PORT: 5672
+                SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-guest}
+                SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-guest}
+                SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-development}
+              ports:
+                - "8083:8080"  # Map host 8083 to container 8080 (matches your Dockerfile)
+              networks:
+                - user-network
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]  # Container port 8080
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+          
           volumes:
-            postgres_data:
+            user-db-data:
+          
+          networks:
+            user-network:
+              driver: bridge
           EOF
-          fi
 
       - name: Deploy to Development
         run: |
@@ -402,7 +417,7 @@ jobs:
           cat > .env << EOF
           DOCKER_IMAGE=${DOCKER_IMAGE}
           SPRING_PROFILES_ACTIVE=development
-          POSTGRES_DB=userService_dev
+          POSTGRES_DB=userService
           POSTGRES_USER=postgres
           POSTGRES_PASSWORD=Server123@
           RABBITMQ_DEFAULT_USER=guest
@@ -412,9 +427,9 @@ jobs:
           echo "Environment configuration:"
           cat .env
           
-          # Deploy services
+          # Deploy services using the CI-specific compose file
           echo "Starting all services..."
-          docker compose up -d
+          docker compose -f docker-compose.ci.yml up -d
           
           # Wait for services to be ready
           echo "⏳ Waiting for services to be ready..."
@@ -429,7 +444,7 @@ jobs:
             elif [ $i -eq 10 ]; then
               echo "❌ Development deployment health check failed after $i attempts"
               echo "Service logs:"
-              docker compose logs user-service
+              docker compose -f docker-compose.ci.yml logs userservice
               echo "Continuing anyway for demo purposes..."
               break
             else
@@ -445,7 +460,7 @@ jobs:
           echo "Version: ${{ needs.build.outputs.version }}"
           echo "Docker credentials available: ${{ needs.docker.outputs.has-docker-creds }}"
           echo "Services status:"
-          docker compose ps
+          docker compose -f docker-compose.ci.yml ps
           echo "✅ Development deployment completed"
 
   # ================================
@@ -471,10 +486,24 @@ jobs:
       - name: Create production docker-compose override
         run: |
           cat > docker-compose.prod.yml << 'EOF'
+          version: "3.9"
           services:
-            user-service:
+            postgres-user:
               deploy:
-                replicas: 1
+                resources:
+                  limits:
+                    cpus: '0.5'
+                    memory: 512M
+          
+            rabbitmq:
+              deploy:
+                resources:
+                  limits:
+                    cpus: '0.25'
+                    memory: 256M
+          
+            userservice:
+              deploy:
                 resources:
                   limits:
                     cpus: '1.0'
@@ -487,68 +516,29 @@ jobs:
                 timeout: 5s
                 retries: 3
                 start_period: 40s
-          
-            postgres:
-              deploy:
-                resources:
-                  limits:
-                    cpus: '0.5'
-                    memory: 512M
-              volumes:
-                - postgres_prod_data:/var/lib/postgresql/data
-          
-            rabbitmq:
-              deploy:
-                resources:
-                  limits:
-                    cpus: '0.25'
-                    memory: 256M
-          
-          volumes:
-            postgres_prod_data:
           EOF
 
-      - name: Create base docker-compose.yml if not exists
+      - name: Create CI docker-compose for production
         run: |
-          if [ ! -f "docker-compose.yml" ]; then
-            echo "Creating docker-compose.yml for production deployment..."
-            cat > docker-compose.yml << 'EOF'
-          services:
-            user-service:
-              image: ${DOCKER_IMAGE}
-              ports:
-                - "8083:8080"
-              environment:
-                - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-production}
-                - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-userService_prod}
-                - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-postgres}
-                - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-Server123@}
-                - SPRING_RABBITMQ_HOST=rabbitmq
-                - SPRING_RABBITMQ_PORT=5672
-                - SPRING_RABBITMQ_USERNAME=${RABBITMQ_DEFAULT_USER:-guest}
-                - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_DEFAULT_PASS:-guest}
-              depends_on:
-                postgres:
-                  condition: service_healthy
-                rabbitmq:
-                  condition: service_healthy
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
-                interval: 30s
-                timeout: 10s
-                retries: 3
-                start_period: 40s
+          # Create the CI compose file for production deployment
+          echo "Creating CI-specific docker-compose file for production..."
+          cat > docker-compose.ci.yml << 'EOF'
+          version: "3.9"
           
-            postgres:
+          services:
+            postgres-user:
               image: postgres:15
+              container_name: user-postgres-prod
               environment:
-                - POSTGRES_DB=${POSTGRES_DB:-userService_prod}
-                - POSTGRES_USER=${POSTGRES_USER:-postgres}
-                - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-Server123@}
+                POSTGRES_DB: ${POSTGRES_DB:-userService}
+                POSTGRES_USER: ${POSTGRES_USER:-postgres}
+                POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SecureProdPassword123!}
               ports:
                 - "5432:5432"
               volumes:
-                - postgres_data:/var/lib/postgresql/data
+                - user-prod-db-data:/var/lib/postgresql/data
+              networks:
+                - user-network
               healthcheck:
                 test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
                 interval: 10s
@@ -557,22 +547,56 @@ jobs:
           
             rabbitmq:
               image: rabbitmq:3-management
+              container_name: rabbitmq-user-prod
               environment:
-                - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-guest}
-                - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:-guest}
+                RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+                RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
               ports:
                 - "5672:5672"
                 - "15672:15672"
+              networks:
+                - user-network
               healthcheck:
                 test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
                 interval: 30s
                 timeout: 10s
                 retries: 5
           
+            userservice:
+              image: ${DOCKER_IMAGE}
+              container_name: userservice-prod
+              depends_on:
+                postgres-user:
+                  condition: service_healthy
+                rabbitmq:
+                  condition: service_healthy
+              environment:
+                SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-production}
+                SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-user:5432/${POSTGRES_DB:-userService}
+                SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+                SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-SecureProdPassword123!}
+                SPRING_RABBITMQ_HOST: rabbitmq
+                SPRING_RABBITMQ_PORT: 5672
+                SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-guest}
+                SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-guest}
+              ports:
+                - "8083:8083"
+              networks:
+                - user-network
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+          
           volumes:
-            postgres_data:
+            user-prod-db-data:
+          
+          networks:
+            user-network:
+              driver: bridge
           EOF
-          fi
 
       - name: Deploy to Production
         run: |
@@ -591,7 +615,7 @@ jobs:
           cat > .env.prod << EOF
           DOCKER_IMAGE=${DOCKER_IMAGE}
           SPRING_PROFILES_ACTIVE=production
-          POSTGRES_DB=userService_prod
+          POSTGRES_DB=userService
           POSTGRES_USER=postgres
           POSTGRES_PASSWORD=SecureProdPassword123!
           RABBITMQ_DEFAULT_USER=guest
@@ -600,9 +624,9 @@ jobs:
           
           echo "Production environment configured"
           
-          # Deploy with production configuration
+          # Deploy with production configuration using CI compose files
           echo "Starting production services..."
-          docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d
+          docker compose --env-file .env.prod -f docker-compose.ci.yml -f docker-compose.prod.yml up -d
           
           # Wait for services
           echo "⏳ Waiting for production services to be ready..."
@@ -617,7 +641,7 @@ jobs:
             elif [ $i -eq 12 ]; then
               echo "❌ Production health check failed after $i attempts"
               echo "Service logs:"
-              docker compose --env-file .env.prod logs user-service
+              docker compose --env-file .env.prod -f docker-compose.ci.yml -f docker-compose.prod.yml logs userservice
               echo "Continuing for demo purposes..."
               break
             else
@@ -635,7 +659,7 @@ jobs:
           echo "Version: ${{ needs.build.outputs.version }}"
           echo "Docker credentials available: ${{ needs.docker.outputs.has-docker-creds }}"
           echo "Services status:"
-          docker compose --env-file .env.prod ps
+          docker compose --env-file .env.prod -f docker-compose.ci.yml -f docker-compose.prod.yml ps
           echo "✅ Production deployment completed"
 
   # ================================
