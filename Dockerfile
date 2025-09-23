@@ -24,7 +24,7 @@ WORKDIR /app
 COPY --from=build /home/gradle/src/build/libs/*.jar /app/app.jar
 
 # Expose application port
-EXPOSE 8080
+EXPOSE 8083
 
 # Set environment variables (timezone + locale)
 ENV TZ=UTC \
