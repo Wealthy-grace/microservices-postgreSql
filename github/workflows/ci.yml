@@ -258,6 +258,7 @@ jobs:
       # Build locally if no credentials (for testing/validation)
       - name: Build Docker image locally
         if: steps.docker-creds.outputs.has-creds == 'false'
+        id: build-local
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -266,14 +267,23 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE_NAME }}:test-${{ needs.build.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          load: true
 
-      - name: Run Trivy scanner on Docker image
+      - name: Verify local image build
+        if: steps.docker-creds.outputs.has-creds == 'false'
+        run: |
+          echo "Verifying local image was built successfully..."
+          docker images | grep ${{ env.DOCKER_IMAGE_NAME }} || echo "Image not found in docker images"
+          docker inspect ${{ env.DOCKER_IMAGE_NAME }}:test-${{ needs.build.outputs.version }} || echo "Image inspection failed"
+
+      - name: Run Trivy scanner on Docker image (pushed)
         if: steps.docker-creds.outputs.has-creds == 'true'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.version }}
           format: 'sarif'
           output: 'docker-trivy-results.sarif'
+          skip-update: true
 
       - name: Run Trivy scanner on local image
         if: steps.docker-creds.outputs.has-creds == 'false'
@@ -282,6 +292,7 @@ jobs:
           image-ref: ${{ env.DOCKER_IMAGE_NAME }}:test-${{ needs.build.outputs.version }}
           format: 'sarif'
           output: 'docker-trivy-results.sarif'
+          skip-update: true
 
       - name: Upload Docker scan results
         uses: github/codeql-action/upload-sarif@v3
