@@ -324,7 +324,6 @@ jobs:
           if [ ! -f "docker-compose.yml" ]; then
             echo "Creating docker-compose.yml for deployment..."
             cat > docker-compose.yml << 'EOF'
-          version: '3.8'
           services:
             user-service:
               image: ${DOCKER_IMAGE}
@@ -472,7 +471,6 @@ jobs:
       - name: Create production docker-compose override
         run: |
           cat > docker-compose.prod.yml << 'EOF'
-          version: '3.8'
           services:
             user-service:
               deploy:
@@ -515,7 +513,6 @@ jobs:
           if [ ! -f "docker-compose.yml" ]; then
             echo "Creating docker-compose.yml for production deployment..."
             cat > docker-compose.yml << 'EOF'
-          version: '3.8'
           services:
             user-service:
               image: ${DOCKER_IMAGE}
@@ -638,7 +635,7 @@ jobs:
           echo "Version: ${{ needs.build.outputs.version }}"
           echo "Docker credentials available: ${{ needs.docker.outputs.has-docker-creds }}"
           echo "Services status:"
-          docker-compose --env-file .env.prod ps
+          docker compose --env-file .env.prod ps
           echo "✅ Production deployment completed"
 
   # ================================
