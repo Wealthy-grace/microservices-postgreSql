@@ -415,7 +415,7 @@ jobs:
           
           # Deploy services
           echo "Starting all services..."
-          docker-compose up -d
+          docker compose up -d
           
           # Wait for services to be ready
           echo "⏳ Waiting for services to be ready..."
@@ -430,7 +430,7 @@ jobs:
             elif [ $i -eq 10 ]; then
               echo "❌ Development deployment health check failed after $i attempts"
               echo "Service logs:"
-              docker-compose logs user-service
+              docker compose logs user-service
               echo "Continuing anyway for demo purposes..."
               break
             else
@@ -446,7 +446,7 @@ jobs:
           echo "Version: ${{ needs.build.outputs.version }}"
           echo "Docker credentials available: ${{ needs.docker.outputs.has-docker-creds }}"
           echo "Services status:"
-          docker-compose ps
+          docker compose ps
           echo "✅ Development deployment completed"
 
   # ================================
@@ -605,7 +605,7 @@ jobs:
           
           # Deploy with production configuration
           echo "Starting production services..."
-          docker-compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d
+          docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d
           
           # Wait for services
           echo "⏳ Waiting for production services to be ready..."
@@ -620,7 +620,7 @@ jobs:
             elif [ $i -eq 12 ]; then
               echo "❌ Production health check failed after $i attempts"
               echo "Service logs:"
-              docker-compose --env-file .env.prod logs user-service
+              docker compose --env-file .env.prod logs user-service
               echo "Continuing for demo purposes..."
               break
             else
